@@ -3,6 +3,7 @@ FROM python:3.11-slim AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     APP_HOME=/app \
+    PYTHONPATH=/app \
     DEBIAN_FRONTEND=noninteractive \
     RUFF_CACHE_DIR=/tmp/.ruff_cache
 

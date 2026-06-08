@@ -322,7 +322,7 @@ Run the unit test container:
 
 ```bash
 docker build --target test -t ai-kube-agent:test .
-docker run --rm ai-kube-agent:test sh -c "ruff check app tests && pytest -q -o cache_dir=/tmp/.pytest_cache"
+docker run --rm ai-kube-agent:test pytest -q -o cache_dir=/tmp/.pytest_cache
 ```
 
 ## Cleanup
