@@ -751,17 +751,17 @@ async function load() {
       
       let warningText = "";
       if (config.ai_status === "no_key") {
-        warningText = "<strong>AI etkinleştirildi ama API key eksik!</strong> Ayarlar panelinden bir Pioneer API key girin veya AI'yi devre dışı bırakın.";
+        warningText = "<strong>AI is enabled but the API key is missing.</strong> Add a Pioneer API key in the settings panel or disable AI.";
       } else if (config.ai_status === "invalid_key") {
-        warningText = "<strong>AI etkinleştirildi ama API key geçersiz!</strong> Girdiğiniz API anahtarı doğrulanamadı. Ayarlar panelinden geçerli bir API key girin.";
+        warningText = "<strong>AI is enabled but the API key is invalid.</strong> The key could not be verified. Enter a valid API key in the settings panel.";
       } else {
-        warningText = "<strong>AI etkinleştirildi ama endpoint yapılandırılmamış!</strong> PIONEER_ENDPOINT environment variable'ı kontrol edin.";
+        warningText = "<strong>AI is enabled but the endpoint is not configured.</strong> Check the PIONEER_ENDPOINT environment variable.";
       }
 
       warnBanner.innerHTML = `
         <span style="font-size:20px;">⚠️</span>
         <span>${warningText}</span>
-        <button onclick="document.getElementById('aiKeyWarningBanner').remove()" style="margin-left:auto;background:transparent;border:1px solid #fff;color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px;">Kapat</button>`;
+        <button onclick="document.getElementById('aiKeyWarningBanner').remove()" style="margin-left:auto;background:transparent;border:1px solid #fff;color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px;">Dismiss</button>`;
     } else if (warnBanner) {
       warnBanner.remove();
     }
@@ -776,7 +776,7 @@ async function load() {
       document.getElementById("setting_ai_timeout").value = config.ai_timeout_seconds ?? 30;
       document.getElementById("setting_ai_enabled").checked = config.ai_enabled ?? false;
       const modelSelect = document.getElementById("setting_pioneer_model");
-      if (modelSelect) modelSelect.value = config.pioneer_model ?? "claude-haiku-4-5";
+      if (modelSelect) modelSelect.value = config.pioneer_model ?? "pioneer-fast";
 
       const apiKeyInput = document.getElementById("setting_pioneer_api_key");
       if (apiKeyInput) {

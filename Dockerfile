@@ -8,6 +8,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR ${APP_HOME}
 
+LABEL org.opencontainers.image.authors="Hakan Bayraktar"
+
 RUN groupadd -g 10001 app && useradd -u 10001 -g app -m -s /usr/sbin/nologin app \
     && apt-get update \
     && apt-get install -y --no-install-recommends curl \

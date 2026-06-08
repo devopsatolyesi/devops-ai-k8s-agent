@@ -1,35 +1,27 @@
 # AI Kubernetes Troubleshooting Agent
 
-Kubernetes cluster'ındaki hataları yerel deterministik kurallar (local rules) ve Pioneer AI desteğiyle analiz eden, kullanıcı onaylı etkileşimli hata giderme (self-healing) yeteneğine sahip local Kubernetes demo uygulaması.
+Author: Hakan Bayraktar
 
-Bu proje, platform mühendisliği ve AI entegrasyonu konularına ilgi duyan geliştiriciler ile DevOps mühendisleri için yerel bir öğrenme, test ve prototip geliştirme laboratuvarı sunmaktadır.
+This project is a local Kubernetes troubleshooting lab. It scans cluster resources, applies deterministic rules for common failure modes, and can optionally request deeper analysis from the Pioneer AI API. Any remediation remains user-approved.
 
----
+## Overview
 
-## 📖 Projenin Amacı ve Özellikleri
+Troubleshooting workloads in Kubernetes often requires checking pod state, events, logs, service selectors, endpoints, and ingress wiring together. This agent runs inside the cluster, collects that evidence, and presents findings in a dashboard so operators can inspect issues and optionally generate guided remediation plans.
 
-Kubernetes cluster'larında çalışan uygulamaların hatalarını ayıklamak (troubleshooting) genellikle karmaşık ve zaman alıcıdır. Pod hataları, Kubernetes eventleri, `kubectl describe` status bilgileri, container logları, Service, Endpoint ve Ingress ilişkileri gibi birçok farklı verinin bir arada incelenmesini gerektirir. 
+### Core Features
 
-Bu agent, Kubernetes cluster'ında bir Pod olarak çalışır, cluster durumunu izler ve junior DevOps mühendislerinin hata ayıklama sürelerini azaltmayı ve deterministik yerel çözümleri AI analiz yetenekleriyle birleştirmeyi hedefler.
+- Local Kubernetes monitoring for pod failures such as `CrashLoopBackOff`, `ImagePullBackOff`, `OOMKilled`, `CreateContainerConfigError`, and `Pending`
+- Deterministic rule engine for fast analysis before any external AI request is attempted
+- Optional Pioneer AI integration for complex or unknown failures
+- Human-in-the-loop remediation flow with explicit approval before any patch is applied
+- Demo scenarios that intentionally create broken workloads for local testing
+- Secret masking for logs, prompts, and stored configuration
 
-### Temel Özellikler
-- **Yerel K8s İzleme**: Pod hataları (`CrashLoopBackOff`, `ImagePullBackOff`, `OOMKilled`, `CreateContainerConfigError`, `Pending` vb.), events, loglar, Service, Endpoint ve Ingress durumlarını izler.
-- **Local Rule Engine (Yerel Kural Motoru)**: CrashLoopBackOff, ImagePullBackOff, OOMKilled gibi yaygın hataları yerel kurallarla hızlıca analiz eder. Eğer problem biliniyorsa AI API çağrısı yapmadan hızlı çözüm önerir, böylece AI maliyetini ve gecikmesini minimize eder.
-- **Pioneer AI Entegrasyonu**: Yerel kuralların çözemediği karmaşık veya bilinmeyen hataları Pioneer AI API (`claude-haiku-4-5`) aracılığıyla güvenli ve maskelenmiş olarak analiz eder.
-- **Kullanıcı Onaylı İyileştirme (Human-in-the-Loop)**: Agent hiçbir zaman otomatik patch uygulamaz. Arayüzden hatayı seçip "Solve with AI" butonuna bastığınızda AI parametrik bir eylem planı oluşturur. Siz parametreleri onayladıktan sonra değişiklikler cluster'a uygulanır.
-- **Demo Hata Simülasyonu**: "Create Problem" modalı veya "Reset Demo" butonu yardımıyla cluster üzerinde anında kasıtlı hatalar (bozuk podlar, eksik configmapler vb.) üretebilir ve agent'ın bunları nasıl çözdüğünü adım adım test edebilirsiniz.
-- **Güvenli API Key Saklama**: API anahtarları asla kod veya manifest dosyalarında saklanmaz. Doğrudan Kubernetes Secret olarak etcd üzerinde tutulur. AI'ye gönderilen veriler (loglar, env verileri) hassas bilgilerden arındırılır (masking).
+## Architecture
 
----
+The project is designed to run on a local **Kind (Kubernetes in Docker)** cluster.
 
-## 🛠️ Mimari
-
-Proje, yerel makinenizde koşan bir **Kind (Kubernetes in Docker)** cluster üzerinde çalışır.
-
-### Genel Sistem Mimarisi
-Aşağıdaki diyagramda, yerel makinedeki bilesenlerin ve veri akışının genel yapısı gösterilmektedir:
-
-![Proje Mimarisi](docs/architecture.png)
+![Project Architecture](docs/architecture.png)
 
 ```mermaid
 graph TD
@@ -46,18 +38,19 @@ graph TD
     A -- Secure Request / PIONEER_API_KEY --> F[Pioneer AI API]
 ```
 
-### Namespace Bileşenleri
+### Namespaces and Components
+
 ```text
 Kubernetes Cluster
 ├── ai-kube-agent namespace
 │   ├── ai-kube-agent Deployment (FastAPI backend + Jinja2/JS dashboard)
 │   ├── Service (ClusterIP)
-│   ├── ConfigMap (Uygulama ayarları)
-│   ├── Secret (Pioneer AI API anahtarı)
+│   ├── ConfigMap (application settings)
+│   ├── Secret (Pioneer AI API key)
 │   ├── ServiceAccount
 │   ├── ClusterRole
 │   └── ClusterRoleBinding
-└── demo-broken-apps namespace (Hata simülasyonları)
+└── demo-broken-apps namespace
     ├── crashloop-demo
     ├── imagepull-demo
     ├── oomkilled-demo
@@ -68,11 +61,9 @@ Kubernetes Cluster
     └── ai-analysis-demo
 ```
 
----
+## How It Works
 
-## 🔄 Agent Nasıl Çalışır?
-
-Agent varsayılan olarak belirlenen aralıklarla tespiti otomatik gerçekleştirir. Pod, Service, Endpoint ve Ingress kaynaklarını listeler. Problemli kaynaklar için event, status, restart count, termination reason, log tail ve trafik ilişkilerini toplar. Sonra local rule engine çalışır. Rule engine her finding için problem tipi, confidence, güvenli auto-fix var mı ve AI analizi gerekip gerekmediğini üretir. Aynı problem daha önce analiz edildiyse fingerprint üzerinden güncellenir ve gereksiz AI çağrısı yapılmaz.
+The agent periodically scans pods, services, endpoints, and ingresses. For unhealthy resources it collects status, restart counts, termination reasons, recent logs, events, and traffic relationships. The local rule engine classifies each finding, decides whether AI analysis is needed, and avoids duplicate external requests by using a fingerprint cache.
 
 ```mermaid
 sequenceDiagram
@@ -85,56 +76,53 @@ sequenceDiagram
     participant AI as Pioneer AI API
 
     Timer->>Scanner: Trigger Scan Loop
-    Scanner->>K8s: List Pods, Services, Ingresses & Logs/Events
-    K8s-->>Scanner: Return Raw Cluster Resources
+    Scanner->>K8s: List Pods, Services, Ingresses, Logs, and Events
+    K8s-->>Scanner: Return Cluster Resources
     Scanner->>Rules: Run Deterministic Checks
-    Rules-->>Scanner: Return Local Findings (e.g. OOMKilled, ServiceNoEndpoints)
-    
-    loop For each Finding
-        Scanner->>DB: Check if Fingerprint exists in DB
-        alt Fingerprint not found & Severity >= AI_MIN_SEVERITY & AI_ENABLED = true & needs_ai_analysis = true
-            Scanner->>AI: Send masked evidence (Prompt + Logs)
-            AI-->>Scanner: Return Analysis & Proposed Patch
-            Scanner->>DB: Save Finding with AI Analysis
-        else Fingerprint found OR Severity < AI_MIN_SEVERITY OR AI_ENABLED = false
-            Scanner->>DB: Update last seen timestamp (Use Cached/Local Analysis)
+    Rules-->>Scanner: Return Findings
+
+    loop For each finding
+        Scanner->>DB: Check fingerprint cache
+        alt New finding and AI is allowed
+            Scanner->>AI: Send masked evidence
+            AI-->>Scanner: Return analysis and optional proposed fix
+            Scanner->>DB: Save updated finding
+        else Cached or local-only path
+            Scanner->>DB: Refresh last seen timestamp
         end
     end
-    Scanner-->>Timer: Update Dashboard UI & Summary Metrics
+    Scanner-->>Timer: Update dashboard and metrics
 ```
 
----
+## Local Rule Engine
 
-## ⚙️ Yerel Kural Motoru (Local Rule Engine)
+The rule engine performs deterministic checks to reduce unnecessary AI requests:
 
-Yerel kural motoru deterministik kontroller gerçekleştirerek gereksiz AI çağrılarının önüne geçer:
+- `CrashLoopBackOff`: checks restart counts, back-off events, and log hints such as `connection refused`, `timeout`, `permission denied`, and `panic`
+- `ImagePullBackOff` and `ErrImagePull`: checks image naming, tags, and `imagePullSecrets`
+- `OOMKilled`: checks container resource limits and last termination reason
+- `Pending` and `FailedScheduling`: checks node pressure, taint or toleration mismatch, and PVC binding issues
+- `CreateContainerConfigError`: detects missing ConfigMap or Secret references
+- `ServiceNoEndpoints`: checks service selector and pod label matching
+- `IngressBadBackend`: checks whether the referenced backend service and port exist
 
-- **CrashLoopBackOff**: restart count, back-off eventleri ve loglarda `connection refused`, `timeout`, `permission denied`, `panic` gibi ipuçlarını arar.
-- **ImagePullBackOff ve ErrImagePull**: imaj adı, etiket hataları ve `imagePullSecrets` eksikliklerini analiz eder.
-- **OOMKilled**: Konteynerin limit durumunu ve podun son sonlanma nedenini kontrol ederek hafıza yetersizliğini yakalar.
-- **Pending ve FailedScheduling**: Node yetersizliği, taint/toleration uyuşmazlığı veya PVC bound hatalarını kontrol eder.
-- **CreateContainerConfigError**: Eksik ConfigMap veya Secret referanslarını işaret eder.
-- **ServiceNoEndpoints**: Service selector ile Pod label eşleşmelerini kontrol eder.
-- **IngressBadBackend**: Ingress üzerinde belirtilen backend servisinin ve portunun varlığını sorgular.
+## Pioneer AI Integration
 
----
+When AI analysis is enabled, the agent sends masked evidence to `https://api.pioneer.ai/v1/chat/completions`. The default model value in this repository is the neutral placeholder `pioneer-fast`. If your endpoint expects a different model identifier, set `PIONEER_MODEL` explicitly.
 
-## 🤖 Pioneer AI API Entegrasyonu ve Güvenlik
+Example response shape:
 
-### İstek ve Yanıt Yapısı
-AI analizi tetiklendiğinde agent, Pioneer AI API (`https://api.pioneer.ai/v1/chat/completions`) adresine güvenli bir istek gönderir.
-Pioneer model olarak `claude-haiku-4-5` kullanır. Dönen JSON formatındaki yanıt şu alanları içerir:
 ```json
 {
-  "summary": "Hatanın kısa özeti",
-  "probable_root_cause": "Kök neden tahmini",
+  "summary": "Short issue summary",
+  "probable_root_cause": "Most likely root cause",
   "severity": "Critical/High/Medium/Low",
-  "confidence": "Güven oranı (0.0 - 1.0)",
-  "recommended_actions": ["Önerilen adımlar"],
-  "commands_to_verify": ["Doğrulama komutları"],
-  "prevention": ["Gelecekte önleme tavsiyeleri"],
-  "junior_friendly_explanation": "Junior dostu basit açıklama",
-  "action_plan": ["Uygulanabilir adım planı"],
+  "confidence": "0.0 - 1.0",
+  "recommended_actions": ["Suggested actions"],
+  "commands_to_verify": ["Verification commands"],
+  "prevention": ["Prevention ideas"],
+  "junior_friendly_explanation": "Simple explanation",
+  "action_plan": ["Step-by-step plan"],
   "proposed_fix": {
     "patch_target": "deployment/v1",
     "patch_data": {}
@@ -142,65 +130,76 @@ Pioneer model olarak `claude-haiku-4-5` kullanır. Dönen JSON formatındaki yan
 }
 ```
 
-### API Key Güvenliği ve Maskeleme
-Uygulama, hassas verilerin dışarıya sızmasını engellemek için gelişmiş log ve prompt maskeleme katmanına sahiptir. `Authorization: Bearer ...`, `DATABASE_URL`, `password=...`, `token=...` gibi kritik örüntüler otomatik olarak `******` ile maskelenir.
+### Security and Cost Controls
 
-### Maliyet Kontrolü
-- Otomatik cache sistemi sayesinde aynı hatayla tekrar karşılaşıldığında AI çağrısı yapılmaz.
-- `AI_RATE_LIMIT_PER_SCAN` (varsayılan: 5) ile tek taramadaki maksimum istek sayısı sınırlandırılır.
-- `AI_MIN_SEVERITY` (varsayılan: High) ile düşük seviyeli hataların AI'ye gitmesi engellenerek token tasarrufu sağlanır.
+- Sensitive values such as `Authorization: Bearer ...`, `DATABASE_URL`, `password=...`, and `token=...` are masked before external requests
+- Identical findings are cached to avoid repeated AI calls
+- `AI_RATE_LIMIT_PER_SCAN` limits AI requests per scan
+- `AI_MIN_SEVERITY` prevents lower-severity findings from being sent externally
 
----
+## Prerequisites
 
-## 📋 Ön Koşullar
+| Tool | Minimum Version | Install |
+|------|-----------------|---------|
+| Docker / Docker Desktop | 24.0+ | [docker.com](https://www.docker.com/) |
+| Kind | 0.23+ | `brew install kind` or [kind.sigs.k8s.io](https://kind.sigs.k8s.io/) |
+| kubectl | 1.29+ | `brew install kubectl` or [kubernetes.io](https://kubernetes.io/docs/tasks/tools/) |
+| Git | 2.0+ | [git-scm.com](https://git-scm.com/) |
+| Browser | Modern | Chrome, Firefox, Safari, or equivalent |
 
-| Araç | Minimum Sürüm | Kurulum Linki |
-|------|---------------|---------------|
-| **Docker / Docker Desktop** | 24.0+ | [docker.com](https://www.docker.com/) |
-| **Kind** | 0.23+ | `brew install kind` (macOS) veya [kind.sigs.k8s.io](https://kind.sigs.k8s.io/) |
-| **kubectl** | 1.29+ | `brew install kubectl` veya [kubernetes.io](https://kubernetes.io/docs/tasks/tools/) |
-| **Git** | 2.0+ | [git-scm.com](https://git-scm.com/) |
-| **Tarayıcı** | Modern Tarayıcı | Google Chrome, Firefox, Safari vb. |
+## Local Setup
 
----
+### Automated Setup
 
-## 🚀 Kind ile Adım Adım Kurulum ve Çalıştırma
+The fastest path is the provided script:
 
-### A. Otomatik Kurulum (Önerilen Hızlı Yol)
+```bash
+chmod +x scripts/local_test.sh
+./scripts/local_test.sh
+```
 
-1. Proje dizininde scripti çalıştırılabilir yapın:
-   ```bash
-   chmod +x scripts/local_test.sh
-   ```
-2. AI analizi yapmak istiyorsanız API anahtarınızı tanımlayın (yoksa local-only modda çalışır):
-   ```bash
-   export PIONEER_API_KEY="pioneer-api-keyiniz"
-   ```
-3. Kurulum scriptini çalıştırın:
-   ```bash
-   ./scripts/local_test.sh
-   ```
+If you want AI analysis, export your key first:
 
----
+```bash
+export PIONEER_API_KEY="your-api-key"
+export PIONEER_MODEL="your-provider-model-id"
+```
 
-### B. Manuel Kurulum Adımları
+The script will:
 
-#### 1. Kind Cluster Oluşturma
+1. Validate local prerequisites
+2. Create or reuse a Kind cluster named `ai-kube-agent-local`
+3. Build the Docker image
+4. Load the image into Kind
+5. Apply Kubernetes manifests
+6. Deploy demo workloads
+7. Start port forwarding on `http://127.0.0.1:18080`
+8. Trigger a scan and print a short validation summary
+
+Use `./scripts/local_test.sh --reset` to recreate the cluster from scratch.
+
+### Manual Setup
+
+#### 1. Create the Kind cluster
+
 ```bash
 kind create cluster --name ai-kube-agent-local
 ```
 
-#### 2. Docker Imajını Derleme
+#### 2. Build the image
+
 ```bash
 docker build -t ai-kube-agent:local .
 ```
 
-#### 3. Imajı Kind Cluster'ına Yükleme
+#### 3. Load the image into Kind
+
 ```bash
 kind load docker-image ai-kube-agent:local --name ai-kube-agent-local
 ```
 
-#### 4. Namespace ve API Secret Tanımlama
+#### 4. Create the namespace and API secret
+
 ```bash
 kubectl apply -f k8s/namespace.yaml
 
@@ -210,147 +209,126 @@ kubectl create secret generic pioneer-ai-secret \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 
-#### 5. Agent Bileşenlerini Deploy Etme
+#### 5. Deploy the agent
+
 ```bash
 kubectl apply -k k8s/
 ```
 
-#### 6. Demo Hatalı Uygulamaları Deploy Etme
+#### 6. Deploy the demo workloads
+
 ```bash
 kubectl apply -f demo/namespace.yaml
 kubectl apply -f demo/
 ```
 
-#### 7. Port-Forwarding ile Dashboard'u Açma
+#### 7. Open the dashboard
+
 ```bash
 kubectl port-forward svc/ai-kube-agent 18080:80 -n ai-kube-agent
 ```
-Dashboard'a erişim adresi: **http://127.0.0.1:18080**
 
----
+Open `http://127.0.0.1:18080`.
 
-## 💻 Dashboard ve Kullanım Rehberi
+## Dashboard
 
-Arayüz, Kubernetes cluster'ınızdaki sorunları izlemek, AI/lokal kurallar ile analiz etmek ve sorunları doğrudan cluster üzerinde çözmek (self-healing) için tasarlanmıştır.
+The dashboard shows:
 
-### Dashboard Arayüzü
-![Dashboard Arayüzü](docs/dashboard.png)
+- Active findings with severity, namespace, resource, and root-cause summary
+- Solved findings history
+- Rule-based evidence and AI analysis for a selected finding
+- Interactive remediation plans for supported failure types
+- Runtime settings such as scan interval, AI severity threshold, rate limits, and log line limits
 
-### Detaylı Ekran Görüntüleri ve İşlevleri:
+The demo modal can create intentionally broken workloads in `demo-broken-apps` so you can verify the full troubleshooting flow locally.
 
-#### 1. Genel Durum ve Bulgular (Findings)
-Cluster'daki tüm sorunlar durumlarına ve önem seviyelerine göre listelenir. "AI Status" rozeti AI'ın aktif/pasif durumunu gösterir. Satır sonundaki **"Open"** butonu ile detay paneline erişilir.
-![Dashboard Ana Sayfa](docs/dashboard_state.png)
+## Remediation Flow
 
-#### 2. Hata Simüle Etme (Create Problem Modalı)
-Dashboard'un üstündeki "Create Problem" butonuna bastığınızda açılan modal yardımıyla kasıtlı olarak hata türleri seçip cluster üzerine anında deploy edebilirsiniz.
-![Hata Oluşturucu Modalı](docs/create_problem.png)
+1. The scanner detects a finding.
+2. The user opens the finding in the dashboard.
+3. The user requests an AI-generated action plan.
+4. The user reviews and confirms the generated patch.
+5. The backend applies the patch only after explicit approval.
+6. The finding moves to `resolved` after a later scan confirms recovery.
 
-#### 3. Detay ve Çözüm Planı Paneli (Action Plan)
-Bulgu seçildiğinde sağda açılan panel 3 bölümden oluşur:
-- **Detected by Rules**: Yerel deterministik kural tespitleri.
-- **AI Analysis**: Claude AI tarafından sağlanan derin kök neden analizi.
-- **Action Plan / Çözüm Akışı**: "Solve with AI" yardımıyla parametrik hata düzeltme formu.
-![Bulgu Detay Paneli](docs/finding_details.png)
+### Supported Remediation Patterns
 
----
+| Problem Type | Typical Action |
+|--------------|----------------|
+| `CrashLoopBackOff` | Inject or correct required environment variables and restart the workload |
+| `OOMKilled` | Patch memory requests and limits |
+| `ImagePullBackOff` | Update the image name or tag |
+| `CreateContainerConfigError` | Create the missing ConfigMap and restart the rollout |
 
-## ⚡ Kendi Kendini İyileştirme (AI Remediation)
+### RBAC Boundaries
 
-Uygulamanın en güçlü özelliklerinden biri, kullanıcı kontrollü etkileşimli hata giderme akışıdır:
+The service account is intentionally limited. Write actions are restricted to selected resources in the demo namespace. Sensitive namespaces such as `kube-system` are outside the remediation scope.
 
-### Çalışma Akışı
-1. **Tespit**: Tarama sonucunda bir bulgu (Finding) tespit edilir (Rule engine varsayılan olarak `proposed_fix=null` üretir).
-2. **Talep**: Kullanıcı dashboard üzerinden hatayı seçer ve "Solve with AI" butonuna tıklar (AI aktif olmalıdır).
-3. **Plan Üretimi**: Arka planda `GET /api/findings/{id}/ai-plan` çağrılır ve AI hata tipi için parametrik bir plan üretir:
-   - **CrashLoopBackOff (Veritabanı bağlantısı vb.)**: `DATABASE_URL` env girişi
-   - **OOMKilled**: Yeni `memory_limit` ve `memory_request` limit değerleri girişi
-   - **ImagePullBackOff**: Düzeltilmiş doğru `image` adı ve etiketi girişi
-   - **CreateContainerConfigError**: Eksik ConfigMap/Secret adı ve verileri
-4. **Onay ve Patch**: Kullanıcı girdileri kontrol edip düzenler ve **Apply Fix** butonuna tıklar. `POST /api/findings/{id}/ai-execute` tetiklenerek cluster deployment nesnesine patch uygulanır.
-5. **Çözüm**: Hata durumu önce `remediating` olur, yeni tarama podun ayağa kalktığını tespit ettiğinde `resolved` durumuna geçer.
+## Runtime Settings
 
-### Desteklenen Düzeltme Tipleri
-| Hata Tipi | AI / Agent Aksiyonu |
-|-----------|--------------------|
-| **CrashLoopBackOff (db bağlantısı)** | `DATABASE_URL` environment variable enjeksiyonu ve pod restart |
-| **OOMKilled** | Deployment memory limits/requests patch işlemi |
-| **ImagePullBackOff** | Container imajı ismi/etiketi güncellemesi |
-| **CreateContainerConfigError** | Eksik olan ConfigMap oluşturulması ve rollout restart |
+The dashboard exposes live settings:
 
-### RBAC Güvenlik Sınırları
-Agent'ın ServiceAccount yetkisi yalnızca `demo-broken-apps` namespace'indeki `deployments`, `services`, `configmaps` ve `ingresses` kaynakları üzerinde `create`, `patch`, `update` yetkisine sahiptir. `kube-system` veya diğer hassas namespace bileşenlerine müdahale yetkisi tamamen engellenmiştir.
+- `Scan Interval (seconds)`: periodic scan cadence
+- `AI Min Severity Filter`: minimum severity required for external AI analysis
+- `AI Rate Limit (per scan)`: max AI calls per scan cycle
+- `Log Line Limit`: max pod log lines attached to analysis
+- `Enable Pioneer AI Analysis`: enables external AI analysis and guided remediation
+- `AI Remediation Mode`: choose between suggestion-only and executable fixes
+- `AI Remediation Namespaces`: restrict write access to selected namespaces
 
----
+## API Endpoints
 
-## ⚙️ Çalışma Zamanı Ayarları (Runtime Settings)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/` | Dashboard HTML |
+| `GET` | `/healthz` | Liveness probe |
+| `GET` | `/readyz` | Readiness probe |
+| `GET` | `/api/findings` | Active findings |
+| `GET` | `/api/findings/resolved` | Recently resolved findings |
+| `GET` | `/api/findings/{id}` | Finding details |
+| `POST` | `/api/scan` | Trigger a manual scan |
+| `GET` | `/api/summary` | Cluster summary and trends |
+| `GET` | `/api/config` | Public-safe runtime config |
+| `POST` | `/api/config` | Update runtime config |
+| `GET` | `/api/findings/{id}/ai-plan` | Generate an interactive remediation plan |
+| `POST` | `/api/findings/{id}/ai-execute` | Apply an approved remediation plan |
+| `POST` | `/api/demo/reset` | Reset demo workloads and trigger a scan |
+| `GET` | `/api/metrics` | Prometheus metrics |
 
-Dashboard'un en altında yer alan panel, agent'ın çalışma davranışlarını tarayıcı üzerinden canlı olarak değiştirmenizi ve API token tüketimini optimize etmenizi sağlar:
-- **Scan Interval (seconds)**: Taramaların kaç saniyede bir yapılacağını ayarlar (varsayılan 10 dakikadır - 600 saniye).
-- **AI Min Severity Filter**: Hangi önem derecesindeki hataların AI analizine gönderileceğini seçer. Gereksiz sistem uyarılarını engellemek için bu değeri `High` veya `Critical` yapabilirsiniz.
-- **AI Rate Limit (per scan)**: Tek bir tarama işlemi sırasında yapılabilecek maksimum AI istek limitini belirler.
-- **Log Line Limit**: Analiz için AI'ye gönderilecek maksimum pod log satırı sınırıdır (varsayılan: 150).
-- **Enable Pioneer AI Analysis**: İşaretlendiğinde hem AI otomatik scan analizi hem de "Solve with AI" etkileşimli iyileştirme aktif olur. Devre dışı bırakıldığında agent **sıfır token** tüketimiyle yalnızca lokal kurallarla çalışır.
+### Prometheus Metrics
 
----
+- `kube_ai_agent_findings_total`
+- `kube_ai_agent_ai_requests_total`
+- `kube_ai_agent_scan_duration_seconds`
+- `kube_ai_agent_last_scan_timestamp`
+- `kube_ai_agent_ai_errors_total`
 
-## 🔌 API Endpointleri ve Prometheus Metrikleri
+## Extending the Project
 
-### API Endpointleri
-| Method | Endpoint | Açıklama |
-|--------|----------|----------|
-| `GET` | `/` | Dashboard HTML sayfası |
-| `GET` | `/healthz` | Liveness check probe |
-| `GET` | `/readyz` | Readiness check probe |
-| `GET` | `/api/findings` | Tüm aktif findings listesi |
-| `GET` | `/api/findings/resolved` | Son 15 dakikada çözülmüş findings arşivi |
-| `GET` | `/api/findings/{id}` | Tek finding detayı |
-| `POST` | `/api/scan` | Manuel scan tetikler |
-| `GET` | `/api/summary` | Cluster sağlık özeti ve trendleri |
-| `GET` | `/api/config` | Public-safe config bilgisi (secret içermez) |
-| `POST` | `/api/config` | Runtime ayarları günceller |
-| `GET` | `/api/findings/{id}/ai-plan` | AI interaktif iyileştirme planı getirir |
-| `POST` | `/api/findings/{id}/ai-execute` | Onaylanan iyileştirme planını cluster'a uygular |
-| `POST` | `/api/demo/reset` | Demo broken apps'leri siler ve anlık scan tetikler |
-| `GET` | `/api/metrics` | Prometheus formatında metrics üretir |
+### Add Another AI Provider
 
-### Prometheus Metrikleri
-- `kube_ai_agent_findings_total`: Toplam aktif sorun sayısı.
-- `kube_ai_agent_ai_requests_total`: Yapılan toplam AI analizi sayısı.
-- `kube_ai_agent_scan_duration_seconds`: Son taramanın saniye bazında süresi.
-- `kube_ai_agent_last_scan_timestamp`: Son başarılı taramanın zaman damgası.
-- `kube_ai_agent_ai_errors_total`: Alınan toplam AI hatası sayısı.
+- Extend [app/ai_client.py](app/ai_client.py) with another client implementation
+- Add the required environment variables in [app/config.py](app/config.py)
+- Point `PIONEER_ENDPOINT` and `PIONEER_MODEL` at the target service
 
----
+### Add More Deterministic Rules
 
-## 🎨 Projeyi Genişletme (Extending the Project)
+- Expand the analyzers in [app/rule_engine.py](app/rule_engine.py)
+- Add fixtures or regression tests in [tests/test_rule_engine.py](tests/test_rule_engine.py)
 
-Bu proje modüler ve genişletilebilir bir mimariye sahiptir. Kendi geliştirme süreçleriniz için şu yolları izleyebilirsiniz:
+## Running Tests
 
-### 1. Farklı AI Sağlayıcıları Ekleme
-Farklı AI modellerini (OpenAI GPT, Anthropic Claude, Google Gemini veya yerel Ollama/Llama modelleri) entegre etmek için:
-- [app/ai_client.py](file:///Users/hakan/devopsatolyesi/devops-ai-kube-agent/app/ai_client.py) dosyasındaki `PioneerAIClient` benzeri bir sınıf oluşturun.
-- [app/config.py](file:///Users/hakan/devopsatolyesi/devops-ai-kube-agent/app/config.py) üzerinde gerekli yeni env tanımlamalarını yapın (örn: `OPENAI_API_KEY`).
+Run the unit test container:
 
-### 2. Yeni Deterministik Kurallar Ekleme
-Yerel kural motorunu zenginleştirmek ve yeni Kubernetes kaynaklarını (StatefulSet, DaemonSet, HPA vb.) analiz etmek için:
-- [app/rule_engine.py](file:///Users/hakan/devopsatolyesi/devops-ai-kube-agent/app/rule_engine.py) dosyasında yer alan analiz metodlarını genişletin.
-
----
-
-## 🧪 Birim Testleri Çalıştırma
-
-Tüm testleri lokalinizde herhangi bir Python bağımlılığı kurmaya gerek duymadan Docker ortamında çalıştırabilirsiniz:
 ```bash
 docker build --target test -t ai-kube-agent:test .
 docker run --rm ai-kube-agent:test sh -c "ruff check app tests && pytest -q -o cache_dir=/tmp/.pytest_cache"
 ```
 
----
+## Cleanup
 
-## 🧹 Temizlik
+Delete the local Kind cluster:
 
-Oluşturduğunuz local Kind cluster'ını ve tüm kaynakları tek bir komutla silebilirsiniz:
 ```bash
 kind delete cluster --name ai-kube-agent-local
 ```
