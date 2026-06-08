@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-no-endpoints-demo
+  namespace: demo-broken-apps
+spec:
+  selector:
+    app: label-that-does-not-exist
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080

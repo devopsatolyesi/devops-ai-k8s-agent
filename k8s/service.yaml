@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-kube-agent
+  namespace: ai-kube-agent
+  labels:
+    app.kubernetes.io/name: ai-kube-agent
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: ai-kube-agent
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+

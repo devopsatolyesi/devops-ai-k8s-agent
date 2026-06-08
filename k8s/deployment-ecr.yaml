@@ -1,0 +1,149 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-kube-agent
+  namespace: ai-kube-agent
+  labels:
+    app.kubernetes.io/name: ai-kube-agent
+    app.kubernetes.io/version: "1.0"
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-kube-agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ai-kube-agent
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: ai-kube-agent
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      # ImagePullSecrets for ECR (if using private ECR)
+      imagePullSecrets:
+        - name: ecr-secret
+      containers:
+        - name: ai-kube-agent
+          # Format: ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/ai-kube-agent:TAG
+          # Set via: kubectl set image deployment/ai-kube-agent ai-kube-agent=<image-url>
+          image: PLACEHOLDER_ECR_IMAGE_URL
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: metrics
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: ai-kube-agent-config
+            - secretRef:
+                name: pioneer-ai-secret
+                optional: true
+          env:
+            - name: DEPLOYMENT_ENV
+              value: "eks"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: ai-kube-agent-pvc
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app.kubernetes.io/name
+                      operator: In
+                      values:
+                        - ai-kube-agent
+                topologyKey: kubernetes.io/hostname
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: ai-kube-agent
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ai-kube-agent-pvc
+  namespace: ai-kube-agent
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp3
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-kube-agent
+  namespace: ai-kube-agent
+  labels:
+    app.kubernetes.io/name: ai-kube-agent
+spec:
+  type: LoadBalancer
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+    - name: metrics
+      port: 8000
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: ai-kube-agent

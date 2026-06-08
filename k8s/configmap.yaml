@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-kube-agent-config
+  namespace: ai-kube-agent
+data:
+  PIONEER_MODEL: claude-haiku-4-5
+  PIONEER_MAX_TOKENS: "1500"
+  PIONEER_TEMPERATURE: "0.2"
+  AI_ENABLED: "false"
+  AI_MIN_SEVERITY: High
+  SCAN_INTERVAL_SECONDS: "60"
+  LOG_LINE_LIMIT: "150"
+  AI_TIMEOUT_SECONDS: "15"
+  AI_RATE_LIMIT_PER_SCAN: "5"
+  CLUSTER_NAME: kubernetes
+  STORAGE_PATH: /data/ai-kube-agent.sqlite3

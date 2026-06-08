@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: network-policy-demo
+  namespace: demo-broken-apps
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: network-policy-demo
+  template:
+    metadata:
+      labels:
+        app: network-policy-demo
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: network-policy-demo
+  namespace: demo-broken-apps
+spec:
+  selector:
+    app: network-policy-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all-ingress
+  namespace: demo-broken-apps
+spec:
+  podSelector:
+    matchLabels:
+      app: network-policy-demo
+  policyTypes:
+    - Ingress
+

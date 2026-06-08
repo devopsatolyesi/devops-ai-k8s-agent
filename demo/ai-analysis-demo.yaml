@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-analysis-demo
+  namespace: demo-broken-apps
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-analysis-demo
+  template:
+    metadata:
+      labels:
+        app: ai-analysis-demo
+    spec:
+      containers:
+        - name: app
+          image: python:3.11-alpine
+          command: ["python", "-c"]
+          args:
+            - |
+              import sys
+              print("database authentication failed for user 'app'")
+              print("check DATABASE_URL and secret rotation state")
+              sys.exit(1)
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi

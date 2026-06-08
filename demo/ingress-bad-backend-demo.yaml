@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-bad-backend-demo
+  namespace: demo-broken-apps
+spec:
+  rules:
+    - host: broken.example.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: missing-backend-service
+                port:
+                  number: 80

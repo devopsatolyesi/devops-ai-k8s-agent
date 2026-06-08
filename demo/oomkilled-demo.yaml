@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oomkilled-demo
+  namespace: demo-broken-apps
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oomkilled-demo
+  template:
+    metadata:
+      labels:
+        app: oomkilled-demo
+    spec:
+      containers:
+        - name: app
+          image: python:3.11-alpine
+          command: ["python", "-c"]
+          args:
+            - |
+              import time
+              data = "x" * 45 * 1024 * 1024
+              print("Allocated 45MB successfully. Sleeping...")
+              while True:
+                  time.sleep(3600)
+          resources:
+            requests:
+              cpu: 20m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 32Mi

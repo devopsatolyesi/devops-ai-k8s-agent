@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bad-config-demo
+  namespace: demo-broken-apps
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bad-config-demo
+  template:
+    metadata:
+      labels:
+        app: bad-config-demo
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.27-alpine
+          envFrom:
+            - configMapRef:
+                name: missing-configmap
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
