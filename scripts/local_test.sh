@@ -60,7 +60,7 @@ fi
 
 success "Docker: $(docker version --format '{{.Server.Version}}' 2>/dev/null || echo 'running')"
 success "kind  : $(kind version | head -1)"
-success "kubectl: $(kubectl version --client --short 2>/dev/null | head -1)"
+success "kubectl: $(kubectl version --client 2>/dev/null | sed -n '1p')"
 
 # ── 2. Securely retrieve API Key ─────────────────────────────────────────────────────
 echo ""
