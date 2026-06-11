@@ -136,7 +136,7 @@ fi
 if [ -n "${PIONEER_API_KEY}" ]; then
   info "Validating Pioneer API key..."
   ENDPOINT="${PIONEER_ENDPOINT:-https://api.pioneer.ai/v1/chat/completions}"
-  MODEL="${PIONEER_MODEL:-pioneer-fast}"
+  MODEL="${PIONEER_MODEL:-claude-haiku-4-5}"
 
   # Minimal ping request
   HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \

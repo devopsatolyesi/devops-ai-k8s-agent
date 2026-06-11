@@ -108,7 +108,7 @@ The rule engine performs deterministic checks to reduce unnecessary AI requests:
 
 ## Pioneer AI Integration
 
-When AI analysis is enabled, the agent sends masked evidence to `https://api.pioneer.ai/v1/chat/completions`. The default model value in this repository is the neutral placeholder `pioneer-fast`. If your endpoint expects a different model identifier, set `PIONEER_MODEL` explicitly.
+When AI analysis is enabled, the agent sends masked evidence to `https://api.pioneer.ai/v1/chat/completions`. The default model is `claude-haiku-4-5`. The dashboard's **AI Model** dropdown is populated automatically from the provider's `/v1/models` endpoint, so you can pick any model your API key has access to. To override the default outside the dashboard, set `PIONEER_MODEL` explicitly.
 
 Example response shape:
 

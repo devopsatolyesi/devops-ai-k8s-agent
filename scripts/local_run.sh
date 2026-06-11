@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export PIONEER_MODEL="${PIONEER_MODEL:-pioneer-fast}"
+export PIONEER_MODEL="${PIONEER_MODEL:-claude-haiku-4-5}"
 export PIONEER_MAX_TOKENS="${PIONEER_MAX_TOKENS:-700}"
 export PIONEER_TEMPERATURE="${PIONEER_TEMPERATURE:-0.2}"
 export AI_ENABLED="${AI_ENABLED:-false}"
