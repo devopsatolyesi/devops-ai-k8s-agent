@@ -55,6 +55,11 @@ def _pod_problem_category(problem_type: str) -> str:
 _AI_REANALYSIS_RESTART_THRESHOLD = 1.5
 _AI_REANALYSIS_MIN_NEW_RESTARTS = 5
 
+# A container with a crash history must be observed running this long (seconds)
+# before a missing finding is treated as recovered. Must cover a scan cycle so a
+# crashlooper caught briefly running between restarts is not falsely "resolved".
+_STABLE_RUNNING_SECONDS = 60
+
 
 class Scanner:
     def __init__(self, settings: Settings, storage: Storage) -> None:
@@ -365,7 +370,7 @@ class Scanner:
                                 terminated_reason = (state.get("terminated") or {}).get("reason", "")
                                 last_state = cs.get("last_state") or cs.get("lastState") or {}
                                 last_terminated_reason = (last_state.get("terminated") or {}).get("reason", "")
-                                
+
                                 running_long_enough = True
                                 if last_terminated_reason:
                                     running_state = state.get("running") or {}
@@ -378,11 +383,14 @@ class Scanner:
                                                 dt = datetime.fromisoformat(ts_str).replace(tzinfo=UTC)
                                             else:
                                                 dt = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
-                                            if (datetime.now(UTC) - dt).total_seconds() < 10:
+                                            # A container with a crash history must run stably for a
+                                            # full scan cycle before we trust it as recovered. 10s let
+                                            # crashloopers caught between restarts look "healthy".
+                                            if (datetime.now(UTC) - dt).total_seconds() < _STABLE_RUNNING_SECONDS:
                                                 running_long_enough = False
                                         except Exception:
                                             pass
-                                
+
                                 # Only mark container as ok if:
                                 # - it is ready, AND
                                 # - has no waiting/terminated failure states, AND
