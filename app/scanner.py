@@ -30,6 +30,27 @@ POD_PROBLEM_ORDER = {
     "ProbeFailed": 8,
 }
 
+# Map volatile, flapping problem types to a stable category so a single unhealthy
+# container keeps ONE fingerprint across scans. Kubernetes flaps the container
+# waiting/termination reason for the SAME underlying issue (e.g.
+# ErrImagePull <-> ImagePullBackOff, OOMKilled <-> CrashLoopBackOff). Including
+# the raw reason in the fingerprint made each flap look like a new problem and
+# falsely marked the previous one "resolved_manually" without any user action.
+_POD_PROBLEM_CATEGORY = {
+    "ErrImagePull": "ImagePull",
+    "ImagePullBackOff": "ImagePull",
+    "CreateContainerConfigError": "ContainerCreate",
+    "CreateContainerError": "ContainerCreate",
+    "RunContainerError": "ContainerCreate",
+    "CrashLoopBackOff": "ContainerCrash",
+    "OOMKilled": "ContainerCrash",
+}
+
+
+def _pod_problem_category(problem_type: str) -> str:
+    """Stable fingerprint category for a pod problem type (collapses flapping states)."""
+    return _POD_PROBLEM_CATEGORY.get(problem_type, problem_type)
+
 # Re-run AI analysis when restart_count has grown by at least this factor since last analysis
 _AI_REANALYSIS_RESTART_THRESHOLD = 1.5
 _AI_REANALYSIS_MIN_NEW_RESTARTS = 5
@@ -98,8 +119,11 @@ class Scanner:
                             break
 
                 for rule in pod_rules:
+                    # Use a stable category (not the flapping problem_type/reason) so the
+                    # same unhealthy container keeps one fingerprint across scans.
                     fingerprint = build_fingerprint(
-                        namespace, owner_name, container_name, rule.problem_type, rule.reason
+                        namespace, owner_name, container_name,
+                        _pod_problem_category(rule.problem_type), "",
                     )
                     restart_count = max(
                         [int(c.get("restart_count", c.get("restartCount", 0)) or 0) for c in container_statuses]

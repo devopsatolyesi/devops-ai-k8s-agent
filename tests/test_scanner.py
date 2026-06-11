@@ -487,3 +487,58 @@ def test_scan_resolves_stably_running_restarted_pod(tmp_path: Path) -> None:
     assert len(storage.list_findings()) == 0
 
 
+def _imagepull_pod(
+    name: str = "imagepull-demo-7fc976cc9f-jggwj", waiting: str = "ErrImagePull"
+) -> dict:
+    """A pod stuck pulling a bad image. K8s flaps `waiting` between
+    'ErrImagePull' and 'ImagePullBackOff' for the SAME underlying problem."""
+    return {
+        "metadata": {
+            "name": name,
+            "namespace": "demo",
+            "ownerReferences": [
+                {"controller": True, "kind": "ReplicaSet", "name": "imagepull-demo-7fc976cc9f"}
+            ],
+        },
+        "status": {
+            "phase": "Pending",
+            "container_statuses": [
+                {
+                    "name": "app",
+                    "ready": False,
+                    "restart_count": 0,
+                    "state": {"waiting": {"reason": waiting}},
+                    "last_state": {},
+                }
+            ],
+        },
+    }
+
+
+def test_flapping_image_pull_reason_does_not_falsely_resolve(tmp_path: Path) -> None:
+    """Regression: a still-broken pod whose waiting reason flaps between
+    ErrImagePull and ImagePullBackOff must NOT be marked 'resolved_manually'
+    nor produce a duplicate finding. The fingerprint must stay stable."""
+    settings = _make_settings(tmp_path)
+    storage = Storage(settings.storage_path)
+    scanner = Scanner(settings, storage)
+
+    # Scan 1: container reports ErrImagePull
+    scanner.k8s = FakeKubernetesClient([_imagepull_pod(waiting="ErrImagePull")])
+    scanner.scan(resolve_missing=True)
+    first = storage.list_findings()
+    assert len(first) == 1
+    fp1 = first[0].fingerprint
+
+    # Scan 2: SAME pod now flaps to ImagePullBackOff (same root cause, nothing fixed)
+    scanner.k8s = FakeKubernetesClient([_imagepull_pod(waiting="ImagePullBackOff")])
+    scanner.scan(resolve_missing=True)
+
+    active = storage.list_findings()
+    resolved = storage.list_resolved()
+
+    assert len(active) == 1, f"flap created a duplicate finding: {len(active)} active"
+    assert active[0].fingerprint == fp1, "fingerprint must stay stable across the flap"
+    assert resolved == [], f"nothing was fixed, but a finding was resolved: {resolved}"
+
+
