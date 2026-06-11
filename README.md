@@ -409,3 +409,9 @@ Delete the local Kind cluster:
 ```bash
 kind delete cluster --name ai-kube-agent-local
 ```
+
+## Further Reading
+
+📖 For English readers: https://lnkd.in/dr4xKpFz
+
+📖 For Turkish readers: https://lnkd.in/dcyJA2XW
