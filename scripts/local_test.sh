@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # scripts/local_test.sh — Kind installation, deployment, and testing in a single command
+# This script does EVERYTHING needed to run the agent locally:
+#   prerequisites -> Kind cluster -> build -> deploy -> demo workloads -> dashboard
+#
 # Usage:
 #   ./scripts/local_test.sh                        # interactive API key prompt
 #   PIONEER_API_KEY=sk-... ./scripts/local_test.sh # with API key
@@ -61,7 +64,41 @@ success "Docker: $(docker version --format '{{.Server.Version}}' 2>/dev/null || 
 success "kind  : $(kind version | head -1)"
 success "kubectl: $(kubectl version --client 2>/dev/null | sed -n '1p')"
 
-# ── 2. Securely retrieve API Key ─────────────────────────────────────────────────────
+# ── 2. Kind cluster setup & preparation ──────────────────────────────────────────
+# The whole point of this script is "one command installs everything", so the
+# cluster is created here automatically. If a healthy cluster already exists we
+# REUSE it and never recreate (unless --reset is passed).
+echo ""
+info "Preparing Kind cluster '${CLUSTER_NAME}'..."
+
+# --reset: tear down first so we start from a clean slate.
+if [ "${RESET_CLUSTER}" = true ] && kind get clusters 2>/dev/null | grep -qx "${CLUSTER_NAME}"; then
+  warn "--reset: Deleting existing cluster '${CLUSTER_NAME}'..."
+  kind delete cluster --name "${CLUSTER_NAME}"
+fi
+
+if kind get clusters 2>/dev/null | grep -qx "${CLUSTER_NAME}"; then
+  # Cluster is registered with Kind — make sure it is actually reachable
+  # before we decide to reuse it.
+  if kubectl --context "${CONTEXT}" cluster-info > /dev/null 2>&1; then
+    success "Cluster '${CLUSTER_NAME}' already exists and is healthy — reusing it (skipping creation)."
+  else
+    warn "Cluster '${CLUSTER_NAME}' exists but is not responding. Recreating it..."
+    kind delete cluster --name "${CLUSTER_NAME}"
+    info "Creating cluster '${CLUSTER_NAME}' (may take 1-2 minutes)..."
+    kind create cluster --name "${CLUSTER_NAME}"
+    success "Cluster recreated."
+  fi
+else
+  info "No existing cluster found. Creating '${CLUSTER_NAME}' (may take 1-2 minutes)..."
+  kind create cluster --name "${CLUSTER_NAME}"
+  success "Cluster created."
+fi
+
+# Make sure kubectl is pointed at the right context for the rest of the script.
+kubectl config use-context "${CONTEXT}" > /dev/null 2>&1 || true
+
+# ── 3. Securely retrieve API Key ─────────────────────────────────────────────────────
 echo ""
 if [ -n "${PIONEER_API_KEY:-}" ]; then
   KEY_LEN="${#PIONEER_API_KEY}"
@@ -83,14 +120,14 @@ if [ -n "${PIONEER_API_KEY}" ]; then
   info "Validating Pioneer API key..."
   ENDPOINT="${PIONEER_ENDPOINT:-https://api.pioneer.ai/v1/chat/completions}"
   MODEL="${PIONEER_MODEL:-pioneer-fast}"
-  
+
   # Minimal ping request
   HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
     -H "Authorization: Bearer ${PIONEER_API_KEY}" \
     -H "Content-Type: application/json" \
     -d "{\"model\": \"${MODEL}\", \"messages\": [{\"role\": \"user\", \"content\": \"ping\"}], \"max_tokens\": 1}" \
     "${ENDPOINT}")
-    
+
   if [ "${HTTP_STATUS}" = "401" ] || [ "${HTTP_STATUS}" = "403" ]; then
     error "The PIONEER_API_KEY you entered is invalid (HTTP ${HTTP_STATUS} Unauthorized)."
     echo -n "  Do you still want to continue? (AI analyses will fail) [y/N]: "
@@ -104,23 +141,6 @@ if [ -n "${PIONEER_API_KEY}" ]; then
   else
     warn "API key validation failed (HTTP ${HTTP_STATUS}). Model name or endpoint might be incompatible. Continuing anyway..."
   fi
-fi
-
-# ── 3. Cluster management ───────────────────────────────────────────────────────
-echo ""
-info "Checking Kind cluster..."
-
-if [ "${RESET_CLUSTER}" = true ] && kind get clusters 2>/dev/null | grep -qx "${CLUSTER_NAME}"; then
-  warn "--reset: Deleting existing cluster '${CLUSTER_NAME}'..."
-  kind delete cluster --name "${CLUSTER_NAME}"
-fi
-
-if ! kind get clusters 2>/dev/null | grep -qx "${CLUSTER_NAME}"; then
-  info "Creating cluster '${CLUSTER_NAME}' (may take 1-2 minutes)..."
-  kind create cluster --name "${CLUSTER_NAME}"
-  success "Cluster created."
-else
-  success "Cluster '${CLUSTER_NAME}' already exists, using it."
 fi
 
 # ── 4. Build Docker image ─────────────────────────────────────────────────────

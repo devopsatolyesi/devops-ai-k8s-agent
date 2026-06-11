@@ -155,11 +155,14 @@ The fastest path is the provided script:
 
 ```bash
 git clone https://github.com/devopsatolyesi/devops-ai-k8s-agent.git
+cd devops-ai-k8s-agent
 chmod +x scripts/local_test.sh
 ./scripts/local_test.sh
 ```
 
-If you want AI analysis, export your key first:
+The Pioneer API key is **optional**. If you skip it, the agent runs in local rule-only
+mode and you can add the key later from the dashboard. To enable AI analysis up front,
+export your key before running the script:
 
 ```bash
 export PIONEER_API_KEY="your-api-key"
