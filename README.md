@@ -170,7 +170,7 @@ If you prefer not to be prompted, export the key (and optionally the model)
 
 ```bash
 export PIONEER_API_KEY="your-api-key"
-export PIONEER_MODEL="your-provider-model-id"   # optional, defaults to pioneer-fast
+export PIONEER_MODEL="your-provider-model-id"   # optional, defaults to claude-haiku-4-5
 ./scripts/local_test.sh
 ```
 
