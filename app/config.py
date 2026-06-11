@@ -32,7 +32,7 @@ def _float_env(name: str, default: float) -> float:
 class Settings:
     cluster_name: str = os.getenv("CLUSTER_NAME", "local-cluster")
     pioneer_api_key: str = os.getenv("PIONEER_API_KEY", "")
-    pioneer_model: str = os.getenv("PIONEER_MODEL", "pioneer-fast")
+    pioneer_model: str = os.getenv("PIONEER_MODEL", "claude-haiku-4-5")
     pioneer_endpoint: str = os.getenv(
         "PIONEER_ENDPOINT", "https://api.pioneer.ai/v1/chat/completions"
     )

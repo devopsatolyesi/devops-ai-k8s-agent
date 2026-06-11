@@ -775,8 +775,7 @@ async function load() {
       document.getElementById("setting_log_line_limit").value = config.log_line_limit ?? 150;
       document.getElementById("setting_ai_timeout").value = config.ai_timeout_seconds ?? 30;
       document.getElementById("setting_ai_enabled").checked = config.ai_enabled ?? false;
-      const modelSelect = document.getElementById("setting_pioneer_model");
-      if (modelSelect) modelSelect.value = config.pioneer_model ?? "pioneer-fast";
+      populateModelSelect(config.pioneer_model);
 
       const apiKeyInput = document.getElementById("setting_pioneer_api_key");
       if (apiKeyInput) {
@@ -876,6 +875,36 @@ document.getElementById("scanBtn").addEventListener("click", async () => {
     showToast(err.message || "Scan failed.", "error", "Scan Error");
   }
 });
+
+// Populate the AI Model dropdown. Loads the live model list from the provider
+// (GET /api/ai-models) and falls back to the built-in catalog the backend
+// returns when the provider is unreachable. Runs once during settings init.
+async function populateModelSelect(current) {
+  const sel = document.getElementById("setting_pioneer_model");
+  if (!sel) return;
+
+  let models = [];
+  let cur = current ?? "claude-haiku-4-5";
+  try {
+    const r = await fetch("/api/ai-models");
+    if (r.ok) {
+      const data = await r.json();
+      models = Array.isArray(data.models) ? data.models : [];
+      cur = current ?? data.current ?? cur;
+    }
+  } catch (_) {
+    // Offline — fall through to the minimal client-side default below.
+  }
+
+  if (!models.length) models = ["claude-haiku-4-5", "claude-opus-4-8", "claude-sonnet-4-6"];
+  // Ensure the currently-selected model is always present and selectable.
+  if (cur && !models.includes(cur)) models.unshift(cur);
+
+  sel.innerHTML = models
+    .map(m => `<option value="${escapeHtml(m)}"${m === cur ? " selected" : ""}>${escapeHtml(m)}</option>`)
+    .join("");
+  sel.value = cur;
+}
 
 async function saveSettings(event) {
   event.preventDefault();

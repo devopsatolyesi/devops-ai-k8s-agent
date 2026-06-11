@@ -448,6 +448,112 @@ def api_summary() -> dict:
 
 # ── Config ─────────────────────────────────────────────────────────────────
 
+# Built-in fallback catalog (Pioneer AI by Fastino Labs). Used only when the
+# live /v1/models endpoint cannot be reached (e.g. no API key configured yet).
+# Claude models are listed first as the recommended defaults.
+_FALLBACK_AI_MODELS = [
+    # Claude (Anthropic) — bare slugs, confirmed working format
+    "claude-fable-5",
+    "claude-opus-4-8",
+    "claude-opus-4-7",
+    "claude-opus-4-6",
+    "claude-opus-4-5",
+    "claude-opus-4-1",
+    "claude-sonnet-4-6",
+    "claude-sonnet-4-5",
+    "claude-haiku-4-5",
+    # OpenAI
+    "gpt-5.5",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.4-nano",
+    "gpt-5.1",
+    "gpt-5-mini",
+    "gpt-5-nano",
+    "gpt-4.1",
+    "gpt-4.1-mini",
+    "gpt-4.1-nano",
+    "gpt-4o",
+    "gpt-4o-mini",
+    "gpt-oss-120b",
+    "gpt-oss-20b",
+    # Google
+    "gemini-3.5-flash",
+    "gemini-3.1-pro",
+    "gemini-3-flash",
+    "google/gemma-4-31b-it",
+    "google/gemma-4-12b-it",
+    "google/gemma-4-e4b-it",
+    "google/gemma-4-e2b-it",
+    "google/gemma-3-4b-pt",
+    # DeepSeek
+    "deepseek-v4-pro",
+    "deepseek-v4-flash",
+    # Qwen
+    "qwen3.7-max",
+    "qwen3.6-max-preview",
+    "qwen3.6-plus",
+    "qwen3.6-flash",
+    "qwen3.6-35b-a3b",
+    "qwen3.6-27b",
+    "qwen3.5-9b",
+    "qwen3-32b",
+    "qwen3-8b",
+    "qwen3-4b-instruct-2507",
+    "qwen3-4b-base",
+    "qwen3-1.7b-base",
+    # Zhipu / Moonshot / MiniMax / MiMo
+    "zai-org/GLM-5.1",
+    "kimi-k2.6",
+    "minimax-m3",
+    "minimax-m2.7",
+    "mimo-v2.5-pro",
+    "mimo-v2.5",
+    # Mistral
+    "mistral-medium-3.5",
+    "mistral-small-4-119b-2603",
+    "mistral-nemo-instruct-2407",
+    # NVIDIA Nemotron
+    "nvidia/nemotron-3-ultra-550b-a55b-bf16",
+    "nvidia/nemotron-3-super-120b-a12b-fp8",
+    "nvidia/nemotron-3-nano-30b-a3b-bf16",
+    # Meta Llama
+    "meta-llama/llama-3.3-70b-instruct",
+    "meta-llama/llama-3.1-8b-instruct",
+    "meta-llama/llama-3.2-3b-instruct",
+    "meta-llama/llama-3.2-1b-instruct",
+    # Others
+    "lfm2-24b-a2b",
+    "smollm3-3b-base",
+    # Fastino (NER / guardrails)
+    "fastino/gliner2-multi-large-v1",
+    "fastino/gliner2-multi-v1",
+    "fastino/gliner2-large-v1",
+    "fastino/gliner2-base-v1",
+    "fastino/gliner2-privacy-filter-pii-multi",
+    "fastino/gliguard-llmguardrails-300m",
+]
+
+
+@app.get("/api/ai-models")
+def api_ai_models() -> dict:
+    """Selectable AI model IDs for the dashboard dropdown.
+
+    Tries the provider's live /v1/models endpoint first (the exact IDs the
+    gateway accepts and the full set tied to the configured key), and falls
+    back to the built-in catalog when the provider can't be reached.
+    """
+    models = scanner.ai.list_models()
+    source = "live"
+    if not models:
+        models = list(_FALLBACK_AI_MODELS)
+        source = "fallback"
+    # Always include the currently-selected model so the dropdown can show it.
+    if settings.pioneer_model and settings.pioneer_model not in models:
+        models.insert(0, settings.pioneer_model)
+    return {"models": models, "current": settings.pioneer_model, "source": source}
+
+
 @app.get("/api/config")
 def api_config() -> dict:
     return settings.public_dict

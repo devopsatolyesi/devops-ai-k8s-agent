@@ -431,3 +431,43 @@ class PioneerAIClient:
             pass
 
         return True, ""
+
+    def list_models(self, api_key: str | None = None, endpoint: str | None = None) -> list[str]:
+        """Fetch selectable model IDs from the provider's OpenAI-compatible /v1/models endpoint.
+
+        The models URL is derived from the chat-completions endpoint
+        (".../v1/chat/completions" -> ".../v1/models"). Returns an empty list on
+        any failure so callers can fall back to a static list.
+        """
+        key = api_key if api_key is not None else self.settings.pioneer_api_key
+        chat_url = endpoint if endpoint is not None else self.settings.pioneer_endpoint
+        if not key or not chat_url:
+            return []
+
+        models_url = chat_url.replace("/chat/completions", "/models")
+        if models_url == chat_url:
+            # Endpoint did not match the expected shape; best-effort append.
+            models_url = chat_url.rstrip("/") + "/models"
+
+        try:
+            headers = {"Authorization": f"Bearer {key}"}
+            with httpx.Client(timeout=10.0) as client:
+                response = client.get(models_url, headers=headers)
+                response.raise_for_status()
+                payload = response.json()
+        except Exception as exc:
+            logger.warning("list_models failed url=%s error=%s", models_url, exc)
+            return []
+
+        # OpenAI-compatible shape is {"data": [{"id": ...}, ...]}; tolerate variations.
+        data = payload.get("data", payload) if isinstance(payload, dict) else payload
+        models: list[str] = []
+        if isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict):
+                    mid = item.get("id") or item.get("name")
+                    if mid:
+                        models.append(str(mid))
+                elif isinstance(item, str):
+                    models.append(item)
+        return sorted(set(models))
