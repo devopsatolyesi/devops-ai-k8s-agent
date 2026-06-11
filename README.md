@@ -282,17 +282,37 @@ kubectl --context "$CTX" port-forward svc/ai-kube-agent 18080:80 -n ai-kube-agen
 
 Open `http://127.0.0.1:18080`.
 
-## Dashboard
+## Dashboard and Usage Guide
 
-The dashboard shows:
+The dashboard lets you monitor problems in your Kubernetes cluster, analyze them with the local rule engine and Pioneer AI, and resolve them directly on the cluster (self-healing).
 
-- Active findings with severity, namespace, resource, and root-cause summary
-- Solved findings history
-- Rule-based evidence and AI analysis for a selected finding
-- Interactive remediation plans for supported failure types
-- Runtime settings such as scan interval, AI severity threshold, rate limits, and log line limits
+### Dashboard interface
 
-The demo modal can create intentionally broken workloads in `demo-broken-apps` so you can verify the full troubleshooting flow locally.
+![Dashboard interface](docs/dashboard.png)
+
+### Screens and what they do
+
+#### 1. Overview and findings
+
+All cluster problems are listed by status and severity, each with its root-cause summary. The **AI Status** badge shows whether AI analysis is active or disabled. Use the **Open** button at the end of a row to reach the detail panel. Solved findings are kept in a separate history tab.
+
+![Findings overview](docs/dashboard_state.png)
+
+#### 2. Simulating failures (Create Problem modal)
+
+The **Create Problem** button at the top opens a modal where you can intentionally pick failure types and deploy them into the `demo-broken-apps` namespace instantly — handy for verifying the full troubleshooting flow locally.
+
+![Create Problem modal](docs/create_problem.png)
+
+#### 3. Detail and action plan panel
+
+Selecting a finding opens a panel on the right with three parts:
+
+- **Detected by Rules** — local deterministic rule findings and the evidence behind them.
+- **AI Analysis** — deep root-cause analysis from Pioneer AI.
+- **Action Plan** — a parametric fix form; click **Solve with AI** to review and apply a guided remediation.
+
+![Finding detail panel](docs/finding_details.png)
 
 ## Remediation Flow
 
