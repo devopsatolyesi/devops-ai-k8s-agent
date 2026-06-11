@@ -265,6 +265,17 @@ class PioneerAIClient:
     _MAX_RETRIES = 2
 
     def _friendly_error(self, exc: Exception, status_code: int | None = None) -> str:
+        if status_code == 400:
+            body = getattr(self, "_last_error_body", "") or ""
+            base = f"AI provider rejected the request (HTTP 400) for model '{self.settings.pioneer_model}'."
+            if body:
+                return f"{base} Provider said: {body}"
+            return f"{base} Check that the selected model supports chat completions and the request parameters are valid."
+        if status_code == 404:
+            return (
+                f"Model or endpoint not found (HTTP 404). Model '{self.settings.pioneer_model}' "
+                f"may not exist on the provider, or the endpoint URL is wrong: {self.settings.pioneer_endpoint}"
+            )
         if status_code == 401:
             return "Invalid or missing API key (HTTP 401). Check PIONEER_API_KEY."
         if status_code == 429:
@@ -319,6 +330,7 @@ class PioneerAIClient:
 
         last_exc: Exception | None = None
         status_code: int | None = None
+        self._last_error_body = ""
 
         for attempt in range(self._MAX_RETRIES + 1):
             if attempt > 0:
@@ -338,6 +350,18 @@ class PioneerAIClient:
                             f"HTTP {status_code}", request=response.request, response=response
                         )
                         continue
+
+                    # Capture the provider's error body BEFORE raising, so the real
+                    # reason (e.g. unsupported param, bad model) reaches the dashboard.
+                    if status_code >= 400:
+                        try:
+                            self._last_error_body = mask_json_text(response.text)[:600]
+                        except Exception:
+                            self._last_error_body = ""
+                        logger.warning(
+                            "ai_http_error status=%d body=%s model=%s",
+                            status_code, self._last_error_body, self.settings.pioneer_model,
+                        )
 
                     response.raise_for_status()
                     payload = response.json()
