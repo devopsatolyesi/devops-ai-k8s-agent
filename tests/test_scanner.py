@@ -464,7 +464,9 @@ def test_scan_resolves_stably_running_restarted_pod(tmp_path: Path) -> None:
     assert len(storage.list_findings()) == 1
 
     from datetime import UTC, datetime, timedelta
-    stable_start = (datetime.now(UTC) - timedelta(seconds=15)).isoformat()
+
+    from app.scanner import _STABLE_RUNNING_SECONDS
+    stable_start = (datetime.now(UTC) - timedelta(seconds=_STABLE_RUNNING_SECONDS + 5)).isoformat()
     pod = {
         "metadata": {"name": "demo-api-7c9d9f6f5d-abcde", "namespace": "demo"},
         "status": {
@@ -483,7 +485,8 @@ def test_scan_resolves_stably_running_restarted_pod(tmp_path: Path) -> None:
     scanner.k8s = FakeKubernetesClient([pod])
     scanner.scan(resolve_missing=True)
 
-    # Finding should be resolved because it has been running stably for >= 10 seconds
+    # Resolved: the restarted container has now been running stably for a full
+    # scan cycle (>= _STABLE_RUNNING_SECONDS), so it is treated as recovered.
     assert len(storage.list_findings()) == 0
 
 
@@ -540,5 +543,45 @@ def test_flapping_image_pull_reason_does_not_falsely_resolve(tmp_path: Path) -> 
     assert len(active) == 1, f"flap created a duplicate finding: {len(active)} active"
     assert active[0].fingerprint == fp1, "fingerprint must stay stable across the flap"
     assert resolved == [], f"nothing was fixed, but a finding was resolved: {resolved}"
+
+
+def test_crashlooper_caught_briefly_running_is_not_resolved(tmp_path: Path) -> None:
+    """Regression: a crashlooping container scanned during its short running window
+    (between back-off restarts) must NOT be marked resolved. It has crashed before
+    (last_state terminated) and has only been running a few seconds."""
+    from datetime import UTC, datetime, timedelta
+
+    settings = _make_settings(tmp_path)
+    storage = Storage(settings.storage_path)
+    scanner = Scanner(settings, storage)
+
+    # Scan 1: container is in CrashLoopBackOff -> a finding is created.
+    scanner.k8s = FakeKubernetesClient([_crashloop_pod()])
+    scanner.scan()
+    assert len(storage.list_findings()) == 1
+
+    # Scan 2: SAME pod is momentarily running (just restarted 5s ago) but has a
+    # crash history. This is the back-off running window, not a recovery.
+    just_started = (datetime.now(UTC) - timedelta(seconds=5)).isoformat()
+    pod = {
+        "metadata": {"name": "demo-api-7c9d9f6f5d-abcde", "namespace": "demo"},
+        "status": {
+            "phase": "Running",
+            "container_statuses": [
+                {
+                    "name": "app",
+                    "ready": True,
+                    "restart_count": 7,
+                    "state": {"running": {"startedAt": just_started}},
+                    "last_state": {"terminated": {"reason": "Error"}},
+                }
+            ],
+        },
+    }
+    scanner.k8s = FakeKubernetesClient([pod])
+    scanner.scan(resolve_missing=True)
+
+    assert len(storage.list_findings()) == 1, "crashlooper caught mid-restart was falsely resolved"
+    assert storage.list_resolved() == [], "nothing recovered; must not appear in solved"
 
 
