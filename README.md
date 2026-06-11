@@ -154,6 +154,7 @@ Example response shape:
 The fastest path is the provided script:
 
 ```bash
+git clone https://github.com/devopsatolyesi/devops-ai-k8s-agent.git
 chmod +x scripts/local_test.sh
 ./scripts/local_test.sh
 ```
