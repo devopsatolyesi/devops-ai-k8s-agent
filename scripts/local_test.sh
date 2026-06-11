@@ -78,25 +78,42 @@ if [ "${RESET_CLUSTER}" = true ] && kind get clusters 2>/dev/null | grep -qx "${
 fi
 
 if kind get clusters 2>/dev/null | grep -qx "${CLUSTER_NAME}"; then
-  # Cluster is registered with Kind — make sure it is actually reachable
-  # before we decide to reuse it.
+  # Cluster is registered with Kind. The kubeconfig context might be missing
+  # (e.g. ~/.kube/config was reset) — export it FIRST so the health check and
+  # all later "kubectl --context ${CONTEXT}" commands actually work. We must do
+  # this before the health check, otherwise a missing context would look like a
+  # dead cluster and we'd destroy a perfectly good one.
+  info "Cluster '${CLUSTER_NAME}' is registered with Kind. Refreshing kubeconfig context..."
+  kind export kubeconfig --name "${CLUSTER_NAME}" > /dev/null 2>&1 || true
+
   if kubectl --context "${CONTEXT}" cluster-info > /dev/null 2>&1; then
     success "Cluster '${CLUSTER_NAME}' already exists and is healthy — reusing it (skipping creation)."
   else
     warn "Cluster '${CLUSTER_NAME}' exists but is not responding. Recreating it..."
     kind delete cluster --name "${CLUSTER_NAME}"
     info "Creating cluster '${CLUSTER_NAME}' (may take 1-2 minutes)..."
-    kind create cluster --name "${CLUSTER_NAME}"
+    kind create cluster --name "${CLUSTER_NAME}" --wait 120s
+    kind export kubeconfig --name "${CLUSTER_NAME}" > /dev/null 2>&1 || true
     success "Cluster recreated."
   fi
 else
   info "No existing cluster found. Creating '${CLUSTER_NAME}' (may take 1-2 minutes)..."
-  kind create cluster --name "${CLUSTER_NAME}"
+  kind create cluster --name "${CLUSTER_NAME}" --wait 120s
+  kind export kubeconfig --name "${CLUSTER_NAME}" > /dev/null 2>&1 || true
   success "Cluster created."
 fi
 
-# Make sure kubectl is pointed at the right context for the rest of the script.
+# Make kubectl's *active* context point at the cluster too, so even bare
+# "kubectl" calls (without --context) hit the right place.
 kubectl config use-context "${CONTEXT}" > /dev/null 2>&1 || true
+
+# Final guard: if the context still isn't usable, stop now with a clear message
+# instead of letting every later apply command fail one by one.
+if ! kubectl --context "${CONTEXT}" cluster-info > /dev/null 2>&1; then
+  error "Kube context '${CONTEXT}' is not reachable. Cannot continue."
+  echo "  Try: kind delete cluster --name ${CLUSTER_NAME} && ./scripts/local_test.sh"
+  exit 1
+fi
 
 # ── 3. Securely retrieve API Key ─────────────────────────────────────────────────────
 echo ""

@@ -184,11 +184,29 @@ Use `./scripts/local_test.sh --reset` to recreate the cluster from scratch.
 
 ### Manual Setup
 
+> **Important:** every `kubectl` command below is pinned to the Kind context with
+> `--context kind-ai-kube-agent-local`. This guarantees the deploy lands on the
+> Kind cluster even if your active context points at a different cluster. The
+> commands assume you are in the repository root.
+
+Set the context name once so the steps stay short:
+
+```bash
+export CTX=kind-ai-kube-agent-local
+```
+
 #### 1. Create the Kind cluster
 
 ```bash
-kind create cluster --name ai-kube-agent-local
+kind create cluster --name ai-kube-agent-local --wait 120s
+
+# Make sure the cluster's context is written into your kubeconfig.
+kind export kubeconfig --name ai-kube-agent-local
+kubectl config use-context "$CTX"
 ```
+
+If the cluster already exists, the `create` command is a no-op and you can run only
+the `export kubeconfig` line to refresh the context.
 
 #### 2. Build the image
 
@@ -202,34 +220,41 @@ docker build -t ai-kube-agent:local .
 kind load docker-image ai-kube-agent:local --name ai-kube-agent-local
 ```
 
+The deployment uses `imagePullPolicy: Never`, so the image must be loaded into Kind
+with the exact tag `ai-kube-agent:local`.
+
 #### 4. Create the namespace and API secret
 
-```bash
-kubectl apply -f k8s/namespace.yaml
+The Pioneer API key is **optional** — if `PIONEER_API_KEY` is empty the agent runs
+in local rule-only mode, and you can add the key later from the dashboard.
 
-kubectl create secret generic pioneer-ai-secret \
+```bash
+kubectl --context "$CTX" apply -f k8s/namespace.yaml
+
+kubectl --context "$CTX" create secret generic pioneer-ai-secret \
   --from-literal=PIONEER_API_KEY="${PIONEER_API_KEY:-}" \
   -n ai-kube-agent \
-  --dry-run=client -o yaml | kubectl apply -f -
+  --dry-run=client -o yaml | kubectl --context "$CTX" apply -f -
 ```
 
 #### 5. Deploy the agent
 
 ```bash
-kubectl apply -k k8s/
+kubectl --context "$CTX" apply -k k8s/
+kubectl --context "$CTX" rollout status deployment/ai-kube-agent -n ai-kube-agent --timeout=180s
 ```
 
 #### 6. Deploy the demo workloads
 
 ```bash
-kubectl apply -f demo/namespace.yaml
-kubectl apply -f demo/
+kubectl --context "$CTX" apply -f demo/namespace.yaml
+kubectl --context "$CTX" apply -f demo/
 ```
 
 #### 7. Open the dashboard
 
 ```bash
-kubectl port-forward svc/ai-kube-agent 18080:80 -n ai-kube-agent
+kubectl --context "$CTX" port-forward svc/ai-kube-agent 18080:80 -n ai-kube-agent
 ```
 
 Open `http://127.0.0.1:18080`.
@@ -290,12 +315,17 @@ The dashboard exposes live settings:
 | `GET` | `/api/findings` | Active findings |
 | `GET` | `/api/findings/resolved` | Recently resolved findings |
 | `GET` | `/api/findings/{id}` | Finding details |
+| `GET` | `/api/findings/{id}/history` | State history for a finding |
 | `POST` | `/api/scan` | Trigger a manual scan |
+| `POST` | `/api/scan-with-ai` | Trigger a manual scan with AI analysis |
 | `GET` | `/api/summary` | Cluster summary and trends |
 | `GET` | `/api/config` | Public-safe runtime config |
 | `POST` | `/api/config` | Update runtime config |
 | `GET` | `/api/findings/{id}/ai-plan` | Generate an interactive remediation plan |
+| `GET` | `/api/findings/{id}/ai-stream` | Stream AI analysis (server-sent events) |
 | `POST` | `/api/findings/{id}/ai-execute` | Apply an approved remediation plan |
+| `GET` | `/api/demo/problems` | List available demo problem scenarios |
+| `POST` | `/api/demo/create` | Create selected demo broken workloads |
 | `POST` | `/api/demo/reset` | Reset demo workloads and trigger a scan |
 | `GET` | `/api/metrics` | Prometheus metrics |
 
