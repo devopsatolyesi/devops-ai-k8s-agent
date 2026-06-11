@@ -412,6 +412,6 @@ kind delete cluster --name ai-kube-agent-local
 
 ## Further Reading
 
-📖 For English readers: https://lnkd.in/dr4xKpFz
+📖 For English readers: https://hbayraktar.medium.com/ai-powered-kubernetes-troubleshooting-a-hands-on-agent-lab-for-junior-devops-engineers-875ae7c8a8a0
 
-📖 For Turkish readers: https://lnkd.in/dcyJA2XW
+📖 For Turkish readers: https://devopsatolyesi.medium.com/ai-ile-kubernetes-troubleshooting-junior-devops-engineerlar-i%CC%87%C3%A7in-uygulamal%C4%B1-agent-lab%C4%B1-87a48305965e
