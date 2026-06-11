@@ -6,7 +6,6 @@
 #   ./scripts/local_test.sh --reset                # delete and reinstall the existing cluster
 
 set -uo pipefail  # NOTE: -e removed so port-forward errors do not stop the script
-kind create cluster --name ai-kube-agent-local
 CLUSTER_NAME="${CLUSTER_NAME:-ai-kube-agent-local}"
 IMAGE="${IMAGE:-ai-kube-agent:local}"
 CONTEXT="kind-${CLUSTER_NAME}"
