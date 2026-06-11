@@ -151,7 +151,8 @@ Example response shape:
 
 ### Automated Setup
 
-The fastest path is the provided script:
+The fastest path is the provided script. It creates the Kind cluster, builds and
+loads the image, deploys everything, and opens the dashboard — all in one command:
 
 ```bash
 git clone https://github.com/devopsatolyesi/devops-ai-k8s-agent.git
@@ -160,13 +161,17 @@ chmod +x scripts/local_test.sh
 ./scripts/local_test.sh
 ```
 
-The Pioneer API key is **optional**. If you skip it, the agent runs in local rule-only
-mode and you can add the key later from the dashboard. To enable AI analysis up front,
-export your key before running the script:
+**About the Pioneer API key (optional):** when you run the script it interactively
+prompts for the key. Just press Enter to skip it — the agent then runs in local
+rule-only mode and you can add the key later from the dashboard.
+
+If you prefer not to be prompted, export the key (and optionally the model)
+**before** running the script and it will pick them up automatically:
 
 ```bash
 export PIONEER_API_KEY="your-api-key"
-export PIONEER_MODEL="your-provider-model-id"
+export PIONEER_MODEL="your-provider-model-id"   # optional, defaults to pioneer-fast
+./scripts/local_test.sh
 ```
 
 The script will:
@@ -228,6 +233,13 @@ with the exact tag `ai-kube-agent:local`.
 The Pioneer API key is **optional** — if `PIONEER_API_KEY` is empty the agent runs
 in local rule-only mode, and you can add the key later from the dashboard.
 
+To bake the key in now, export it before running the commands below (the secret
+command reads `$PIONEER_API_KEY`; leaving it unset just creates an empty secret):
+
+```bash
+export PIONEER_API_KEY="your-api-key"   # optional — skip for local rule-only mode
+```
+
 ```bash
 kubectl --context "$CTX" apply -f k8s/namespace.yaml
 
@@ -236,6 +248,16 @@ kubectl --context "$CTX" create secret generic pioneer-ai-secret \
   -n ai-kube-agent \
   --dry-run=client -o yaml | kubectl --context "$CTX" apply -f -
 ```
+
+> The model identifier is **not** read from an environment variable in the manual
+> flow — it comes from [k8s/configmap.yaml](k8s/configmap.yaml) (`PIONEER_MODEL`,
+> default `pioneer-fast`). To use a different model, edit that file before step 5
+> or patch the ConfigMap afterwards:
+>
+> ```bash
+> kubectl --context "$CTX" patch configmap ai-kube-agent-config -n ai-kube-agent \
+>   --type merge -p '{"data":{"PIONEER_MODEL":"your-provider-model-id"}}'
+> ```
 
 #### 5. Deploy the agent
 
