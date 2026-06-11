@@ -251,8 +251,9 @@ kubectl --context "$CTX" create secret generic pioneer-ai-secret \
 
 > The model identifier is **not** read from an environment variable in the manual
 > flow — it comes from [k8s/configmap.yaml](k8s/configmap.yaml) (`PIONEER_MODEL`,
-> default `pioneer-fast`). To use a different model, edit that file before step 5
-> or patch the ConfigMap afterwards:
+> default `claude-haiku-4-5`). You can also just pick a model later from the
+> dashboard's **AI Model** dropdown. To change the default before deploying, edit
+> that file before step 5 or patch the ConfigMap afterwards:
 >
 > ```bash
 > kubectl --context "$CTX" patch configmap ai-kube-agent-config -n ai-kube-agent \
